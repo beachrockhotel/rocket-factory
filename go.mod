@@ -1,3 +1,3 @@
-module rocket-factory
+module github.com/beachrockhotel/rocket-factory
 
-go 1.24
+go 1.24.2
