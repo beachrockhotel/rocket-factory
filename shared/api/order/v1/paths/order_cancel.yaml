@@ -1,0 +1,22 @@
+post:
+  description: Cancel an unpaid order by UUID
+  operationId: CancelOrder
+  tags:
+    - Order
+  parameters:
+    - $ref: ../params/order_uuid.yaml
+  responses:
+    '204':
+      description: The order was successfully cancelled
+    '404':
+      description: Order not found
+      content:
+        application/json:
+          schema:
+            $ref: ../components/errors/not_found_error.yaml
+    '409':
+      description: Order already paid and cannot be cancelled
+      content:
+        application/json:
+          schema:
+            $ref: ../components/errors/conflict_error.yaml
