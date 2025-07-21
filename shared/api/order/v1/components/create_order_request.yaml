@@ -8,11 +8,12 @@ properties:
     description: UUID пользователя
     minLength: 1
     maxLength: 100
-    example: "1"
+    format: uuid
+    example: "123e4567-e89b-12d3-a456-426614174000"
   part_uuids:
     type: array
     description: Список UUID деталей
     items:
       type: string
       format: uuid
-      example: "part-123"
+      example: "123e4567-e89b-12d3-a456-426614174000"

@@ -6,7 +6,8 @@ properties:
   order_uuid:
     type: string
     description: Уникальный идентификатор заказа
-    example: "1"
+    format: uuid
+    example: "123e4567-e89b-12d3-a456-426614174000"
   total_price:
     type: number
     format: float
