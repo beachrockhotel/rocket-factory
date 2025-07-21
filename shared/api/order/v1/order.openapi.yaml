@@ -4,8 +4,8 @@ info:
   version: 1.0.0
   description: API для управления заказами на постройку космических кораблей
 x-ogen:
-  target: ./shared/pkg/openapi/order/v1
-  package: weather_v1
+  target: ./pkg/openapi/order/v1
+  package: order_v1
   clean: true
 
 tags:
