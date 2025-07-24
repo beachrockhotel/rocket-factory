@@ -6,4 +6,5 @@ enum:
   - SBP
   - CREDIT_CARD
   - INVESTOR_MONEY
+nullable: true
 example: "CARD"

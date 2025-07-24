@@ -241,6 +241,51 @@ func (*InternalServerError) createOrderRes()   {}
 func (*InternalServerError) createPaymentRes() {}
 func (*InternalServerError) getOrderRes()      {}
 
+// NewNilPaymentMethod returns new NilPaymentMethod with value set to v.
+func NewNilPaymentMethod(v PaymentMethod) NilPaymentMethod {
+	return NilPaymentMethod{
+		Value: v,
+	}
+}
+
+// NilPaymentMethod is nullable PaymentMethod.
+type NilPaymentMethod struct {
+	Value PaymentMethod
+	Null  bool
+}
+
+// SetTo sets value to v.
+func (o *NilPaymentMethod) SetTo(v PaymentMethod) {
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o NilPaymentMethod) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *NilPaymentMethod) SetToNull() {
+	o.Null = true
+	var v PaymentMethod
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o NilPaymentMethod) Get() (v PaymentMethod, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o NilPaymentMethod) Or(d PaymentMethod) PaymentMethod {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // Ref: #
 type NotFoundError struct {
 	// HTTP-код ошибки.
@@ -272,6 +317,69 @@ func (s *NotFoundError) SetMessage(val string) {
 func (*NotFoundError) cancelOrderRes()   {}
 func (*NotFoundError) createPaymentRes() {}
 func (*NotFoundError) getOrderRes()      {}
+
+// NewOptNilPaymentMethod returns new OptNilPaymentMethod with value set to v.
+func NewOptNilPaymentMethod(v PaymentMethod) OptNilPaymentMethod {
+	return OptNilPaymentMethod{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilPaymentMethod is optional nullable PaymentMethod.
+type OptNilPaymentMethod struct {
+	Value PaymentMethod
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilPaymentMethod was set.
+func (o OptNilPaymentMethod) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilPaymentMethod) Reset() {
+	var v PaymentMethod
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilPaymentMethod) SetTo(v PaymentMethod) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilPaymentMethod) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilPaymentMethod) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v PaymentMethod
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilPaymentMethod) Get() (v PaymentMethod, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilPaymentMethod) Or(d PaymentMethod) PaymentMethod {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
 
 // NewOptNilUUID returns new OptNilUUID with value set to v.
 func NewOptNilUUID(v uuid.UUID) OptNilUUID {
@@ -336,52 +444,6 @@ func (o OptNilUUID) Or(d uuid.UUID) uuid.UUID {
 	return d
 }
 
-// NewOptPaymentMethod returns new OptPaymentMethod with value set to v.
-func NewOptPaymentMethod(v PaymentMethod) OptPaymentMethod {
-	return OptPaymentMethod{
-		Value: v,
-		Set:   true,
-	}
-}
-
-// OptPaymentMethod is optional PaymentMethod.
-type OptPaymentMethod struct {
-	Value PaymentMethod
-	Set   bool
-}
-
-// IsSet returns true if OptPaymentMethod was set.
-func (o OptPaymentMethod) IsSet() bool { return o.Set }
-
-// Reset unsets value.
-func (o *OptPaymentMethod) Reset() {
-	var v PaymentMethod
-	o.Value = v
-	o.Set = false
-}
-
-// SetTo sets value to v.
-func (o *OptPaymentMethod) SetTo(v PaymentMethod) {
-	o.Set = true
-	o.Value = v
-}
-
-// Get returns value and boolean that denotes whether value was set.
-func (o OptPaymentMethod) Get() (v PaymentMethod, ok bool) {
-	if !o.Set {
-		return v, false
-	}
-	return o.Value, true
-}
-
-// Or returns value if set, or given parameter if does not.
-func (o OptPaymentMethod) Or(d PaymentMethod) PaymentMethod {
-	if v, ok := o.Get(); ok {
-		return v
-	}
-	return d
-}
-
 // Ref: #
 type OrderDto struct {
 	// Уникальный идентификатор заказа.
@@ -393,10 +455,9 @@ type OrderDto struct {
 	// Итоговая стоимость.
 	TotalPrice float64 `json:"total_price"`
 	// UUID транзакции (если оплачен).
-	TransactionUUID OptNilUUID `json:"transaction_uuid"`
-	// Способ оплаты (если оплачен).
-	PaymentMethod OptPaymentMethod `json:"payment_method"`
-	Status        OrderStatus      `json:"status"`
+	TransactionUUID OptNilUUID          `json:"transaction_uuid"`
+	PaymentMethod   OptNilPaymentMethod `json:"payment_method"`
+	Status          OrderStatus         `json:"status"`
 }
 
 // GetOrderUUID returns the value of OrderUUID.
@@ -425,7 +486,7 @@ func (s *OrderDto) GetTransactionUUID() OptNilUUID {
 }
 
 // GetPaymentMethod returns the value of PaymentMethod.
-func (s *OrderDto) GetPaymentMethod() OptPaymentMethod {
+func (s *OrderDto) GetPaymentMethod() OptNilPaymentMethod {
 	return s.PaymentMethod
 }
 
@@ -460,7 +521,7 @@ func (s *OrderDto) SetTransactionUUID(val OptNilUUID) {
 }
 
 // SetPaymentMethod sets the value of PaymentMethod.
-func (s *OrderDto) SetPaymentMethod(val OptPaymentMethod) {
+func (s *OrderDto) SetPaymentMethod(val OptNilPaymentMethod) {
 	s.PaymentMethod = val
 }
 
@@ -521,16 +582,16 @@ func (s *OrderStatus) UnmarshalText(data []byte) error {
 
 // Ref: #
 type PayOrderRequest struct {
-	PaymentMethod PaymentMethod `json:"payment_method"`
+	PaymentMethod NilPaymentMethod `json:"payment_method"`
 }
 
 // GetPaymentMethod returns the value of PaymentMethod.
-func (s *PayOrderRequest) GetPaymentMethod() PaymentMethod {
+func (s *PayOrderRequest) GetPaymentMethod() NilPaymentMethod {
 	return s.PaymentMethod
 }
 
 // SetPaymentMethod sets the value of PaymentMethod.
-func (s *PayOrderRequest) SetPaymentMethod(val PaymentMethod) {
+func (s *PayOrderRequest) SetPaymentMethod(val NilPaymentMethod) {
 	s.PaymentMethod = val
 }
 

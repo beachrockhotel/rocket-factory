@@ -41,8 +41,6 @@ properties:
 
   payment_method:
     $ref: ./enums/payment_method.yaml
-    description: Способ оплаты (если оплачен)
-    nullable: true
 
   status:
     $ref: ./enums/order_status.yaml

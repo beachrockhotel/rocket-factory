@@ -8,6 +8,29 @@ import (
 	"github.com/ogen-go/ogen/validate"
 )
 
+func (s *CreateOrderRequest) Validate() error {
+	if s == nil {
+		return validate.ErrNilPointer
+	}
+
+	var failures []validate.FieldError
+	if err := func() error {
+		if s.PartUuids == nil {
+			return errors.New("nil is invalid value")
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "part_uuids",
+			Error: err,
+		})
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+	return nil
+}
+
 func (s *CreateOrderResponse) Validate() error {
 	if s == nil {
 		return validate.ErrNilPointer
@@ -137,8 +160,15 @@ func (s *PayOrderRequest) Validate() error {
 
 	var failures []validate.FieldError
 	if err := func() error {
-		if err := s.PaymentMethod.Validate(); err != nil {
-			return err
+		if value, ok := s.PaymentMethod.Get(); ok {
+			if err := func() error {
+				if err := value.Validate(); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
 		}
 		return nil
 	}(); err != nil {
