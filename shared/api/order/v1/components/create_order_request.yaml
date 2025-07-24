@@ -6,8 +6,6 @@ properties:
   user_uuid:
     type: string
     description: UUID пользователя
-    minLength: 1
-    maxLength: 100
     format: uuid
     example: "123e4567-e89b-12d3-a456-426614174000"
   part_uuids:
