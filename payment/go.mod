@@ -1,4 +1,4 @@
-module github.com/beachrockhotel/rocket-factory/order
+module github.com/beachrockhotel/rocket-factory/payment
 
 go 1.24.4
 
