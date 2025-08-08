@@ -14,6 +14,36 @@ func (s *GenericErrorStatusCode) Error() string {
 }
 
 // Ref: #
+type BadGatewayError struct {
+	// HTTP-код ошибки.
+	Code int `json:"code"`
+	// Описание ошибки.
+	Message string `json:"message"`
+}
+
+// GetCode returns the value of Code.
+func (s *BadGatewayError) GetCode() int {
+	return s.Code
+}
+
+// GetMessage returns the value of Message.
+func (s *BadGatewayError) GetMessage() string {
+	return s.Message
+}
+
+// SetCode sets the value of Code.
+func (s *BadGatewayError) SetCode(val int) {
+	s.Code = val
+}
+
+// SetMessage sets the value of Message.
+func (s *BadGatewayError) SetMessage(val string) {
+	s.Message = val
+}
+
+func (*BadGatewayError) createOrderRes() {}
+
+// Ref: #
 type BadRequestError struct {
 	// HTTP-код ошибки.
 	Code int `json:"code"`
