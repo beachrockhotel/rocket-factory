@@ -30,7 +30,7 @@ const (
 	// Банковская карта
 	PaymentMethod_PAYMENT_METHOD_CARD PaymentMethod = 1
 	// Система быстрых платежей
-	PaymentMethod_PAYMENT_METHOD_SPB PaymentMethod = 2
+	PaymentMethod_PAYMENT_METHOD_SBP PaymentMethod = 2
 	// Кредитная карта
 	PaymentMethod_PAYMENT_METHOD_CREDIT_CARD PaymentMethod = 3
 	// Деньги инвестора (внутренний метод)
@@ -42,14 +42,14 @@ var (
 	PaymentMethod_name = map[int32]string{
 		0: "PAYMENT_METHOD_UNKNOWN_UNSPECIFIED",
 		1: "PAYMENT_METHOD_CARD",
-		2: "PAYMENT_METHOD_SPB",
+		2: "PAYMENT_METHOD_SBP",
 		3: "PAYMENT_METHOD_CREDIT_CARD",
 		4: "PAYMENT_METHOD_INVESTOR_MONEY",
 	}
 	PaymentMethod_value = map[string]int32{
 		"PAYMENT_METHOD_UNKNOWN_UNSPECIFIED": 0,
 		"PAYMENT_METHOD_CARD":                1,
-		"PAYMENT_METHOD_SPB":                 2,
+		"PAYMENT_METHOD_SBP":                 2,
 		"PAYMENT_METHOD_CREDIT_CARD":         3,
 		"PAYMENT_METHOD_INVESTOR_MONEY":      4,
 	}
@@ -208,7 +208,7 @@ const file_payment_v1_payment_proto_rawDesc = "" +
 	"\rPaymentMethod\x12&\n" +
 	"\"PAYMENT_METHOD_UNKNOWN_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13PAYMENT_METHOD_CARD\x10\x01\x12\x16\n" +
-	"\x12PAYMENT_METHOD_SPB\x10\x02\x12\x1e\n" +
+	"\x12PAYMENT_METHOD_SBP\x10\x02\x12\x1e\n" +
 	"\x1aPAYMENT_METHOD_CREDIT_CARD\x10\x03\x12!\n" +
 	"\x1dPAYMENT_METHOD_INVESTOR_MONEY\x10\x042W\n" +
 	"\x0ePaymentService\x12E\n" +

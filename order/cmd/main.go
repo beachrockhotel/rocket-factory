@@ -17,7 +17,6 @@ import (
 	order_v1 "github.com/beachrockhotel/rocket-factory/shared/pkg/openapi/order/v1"
 	inventory_v1 "github.com/beachrockhotel/rocket-factory/shared/pkg/proto/inventory/v1"
 	payment_v1 "github.com/beachrockhotel/rocket-factory/shared/pkg/proto/payment/v1"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
@@ -98,7 +97,6 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *order_v1.CreateOrde
 		}
 	}
 	if len(missing) > 0 {
-		// ← ТОЖЕ КАК РЕЗУЛЬТАТ, error=nil
 		return &order_v1.BadRequestError{
 			Code:    http.StatusBadRequest,
 			Message: "some parts not found: " + strings.Join(missing, ", "),
@@ -132,21 +130,138 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *order_v1.CreateOrde
 	}, nil
 }
 
-// Заглушки, чтобы сервис запускался
+func (h *OrderHandler) GetOrder(_ context.Context, params order_v1.GetOrderParams) (order_v1.GetOrderRes, error) {
+	id := params.OrderUUID.String()
+	h.storage.mu.RLock()
+	o, ok := h.storage.orders[id]
+	h.storage.mu.RUnlock()
+	if !ok {
+		return &order_v1.NotFoundError{
+			Code:    http.StatusNotFound,
+			Message: "order not found",
+		}, nil
+	}
 
-func (h *OrderHandler) CreatePayment(ctx context.Context, req *order_v1.PayOrderRequest, p order_v1.CreatePaymentParams) (order_v1.CreatePaymentRes, error) {
-	return &order_v1.NotFoundError{Code: http.StatusNotFound, Message: "not implemented yet"}, nil
+	return &order_v1.GetOrderResponse{
+		Order: *o,
+	}, nil
 }
 
-func (h *OrderHandler) GetOrder(ctx context.Context, p order_v1.GetOrderParams) (order_v1.GetOrderRes, error) {
-	return &order_v1.NotFoundError{Code: http.StatusNotFound, Message: "not implemented yet"}, nil
+func (h *OrderHandler) CreatePayment(ctx context.Context, req *order_v1.PayOrderRequest, params order_v1.CreatePaymentParams) (order_v1.CreatePaymentRes, error) {
+	id := params.OrderUUID.String()
+	pmOpt := req.PaymentMethod
+
+	// 1) Найти заказ + базовые проверки статуса
+	h.storage.mu.RLock()
+	o, ok := h.storage.orders[id]
+	h.storage.mu.RUnlock()
+	if !ok {
+		return &order_v1.NotFoundError{Code: http.StatusNotFound, Message: "order not found"}, nil
+	}
+	if o.Status == order_v1.OrderStatusCANCELLED {
+		// для CreatePayment контракт не допускает 409, поэтому 400
+		return &order_v1.BadRequestError{Code: http.StatusBadRequest, Message: "order cancelled"}, nil
+	}
+	if o.Status == order_v1.OrderStatusPAID {
+		return &order_v1.BadRequestError{Code: http.StatusBadRequest, Message: "already paid"}, nil
+	}
+
+	// 2) Валидация payment_method
+	pm, ok := pmOpt.Get()
+	if !ok || pm == order_v1.PaymentMethodUNKNOWN {
+		return &order_v1.BadRequestError{Code: http.StatusBadRequest, Message: "invalid payment_method"}, nil
+	}
+
+	// 3) Маппинг OpenAPI → gRPC enum
+	var grpcPM payment_v1.PaymentMethod
+	switch pm {
+	case order_v1.PaymentMethodCARD:
+		grpcPM = payment_v1.PaymentMethod_PAYMENT_METHOD_CARD
+	case order_v1.PaymentMethodSBP:
+		grpcPM = payment_v1.PaymentMethod_PAYMENT_METHOD_SBP
+	case order_v1.PaymentMethodCREDITCARD:
+		grpcPM = payment_v1.PaymentMethod_PAYMENT_METHOD_CREDIT_CARD
+	case order_v1.PaymentMethodINVESTORMONEY:
+		grpcPM = payment_v1.PaymentMethod_PAYMENT_METHOD_INVESTOR_MONEY
+	default:
+		return &order_v1.BadRequestError{Code: http.StatusBadRequest, Message: "invalid payment_method"}, nil
+	}
+
+	// 4) Вызов платёжки
+	pr, err := h.pay.PayOrder(ctx, &payment_v1.PayOrderRequest{
+		OrderUuid:     id,
+		UserUuid:      o.UserUUID.String(),
+		PaymentMethod: grpcPM,
+	})
+	if err != nil {
+		// для CreatePayment контракт не допускает 502, поэтому 500
+		return &order_v1.InternalServerError{Code: http.StatusInternalServerError, Message: "payment unavailable"}, nil
+	}
+
+	// 5) Разбор transaction_uuid из ответа платёжки
+	txStr := pr.GetTransactionUuid()
+	txID, err := uuid.Parse(txStr)
+	if err != nil {
+		return &order_v1.InternalServerError{Code: http.StatusInternalServerError, Message: "invalid transaction uuid from payment"}, nil
+	}
+
+	// 6) Обновить заказ под Lock (на случай гонки проверяем статус повторно)
+	h.storage.mu.Lock()
+	if o2, ok := h.storage.orders[id]; ok {
+		switch o2.Status {
+		case order_v1.OrderStatusPENDINGPAYMENT:
+			o2.Status = order_v1.OrderStatusPAID
+			o2.TransactionUUID.SetTo(txID) // OptNilUUID
+			o2.PaymentMethod.SetTo(pm)     // OptNilPaymentMethod
+		case order_v1.OrderStatusPAID:
+			// если кто-то уже оплатил — вернуть текущий tx идемпотентно
+			if tx, ok := o2.TransactionUUID.Get(); ok {
+				h.storage.mu.Unlock()
+				return &order_v1.PayOrderResponse{TransactionUUID: tx}, nil
+			}
+		case order_v1.OrderStatusCANCELLED:
+			h.storage.mu.Unlock()
+			return &order_v1.BadRequestError{Code: http.StatusBadRequest, Message: "order cancelled"}, nil
+		}
+	}
+	h.storage.mu.Unlock()
+
+	// 7) Возврат успешного ответа с реальным transaction_uuid
+	return &order_v1.PayOrderResponse{TransactionUUID: txID}, nil
 }
 
-func (h *OrderHandler) CancelOrder(ctx context.Context, p order_v1.CancelOrderParams) (order_v1.CancelOrderRes, error) {
-	return &order_v1.NotFoundError{Code: http.StatusNotFound, Message: "not implemented yet"}, nil
+func (h *OrderHandler) CancelOrder(_ context.Context, params order_v1.CancelOrderParams) (order_v1.CancelOrderRes, error) {
+	id := params.OrderUUID.String()
+
+	h.storage.mu.Lock()
+	defer h.storage.mu.Unlock()
+
+	o, ok := h.storage.orders[id]
+	if !ok {
+		return &order_v1.NotFoundError{Code: http.StatusNotFound, Message: "order not found"}, nil
+	}
+
+	switch o.Status {
+	case order_v1.OrderStatusPAID:
+		// Оплаченный нельзя отменить 409
+		return &order_v1.ConflictError{Code: http.StatusConflict, Message: "order already paid"}, nil
+
+	case order_v1.OrderStatusCANCELLED:
+		// Уже отменён — идемпотентно считаем успехом → 204
+		return &order_v1.CancelOrderNoContent{}, nil
+
+	case order_v1.OrderStatusPENDINGPAYMENT:
+		// Отмена ожидающей оплаты ставим CANCELLED и чистим оплату
+		o.Status = order_v1.OrderStatusCANCELLED
+		o.TransactionUUID.SetToNull()
+		o.PaymentMethod.SetToNull()
+		return &order_v1.CancelOrderNoContent{}, nil
+
+	default:
+		return &order_v1.ConflictError{Code: http.StatusConflict, Message: "invalid order status"}, nil
+	}
 }
 
-// для неожиданных ошибок (когда handler вернул error != nil)
 func (h *OrderHandler) NewError(_ context.Context, err error) *order_v1.GenericErrorStatusCode {
 	return &order_v1.GenericErrorStatusCode{
 		StatusCode: http.StatusInternalServerError,

@@ -3,17 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
+	"net"
+	"os"
+	"os/signal"
+	"syscall"
+
 	paymentV1 "github.com/beachrockhotel/rocket-factory/shared/pkg/proto/payment/v1"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
-	"log"
-	"net"
-	"os"
-	"os/signal"
-	"syscall"
 )
 
 const (
@@ -28,13 +29,14 @@ func (s *paymentService) PayOrder(ctx context.Context, req *paymentV1.PayOrderRe
 	if req.GetOrderUuid() == "" || req.GetUserUuid() == "" {
 		return nil, status.Error(codes.InvalidArgument, "order_uuid and user_uuid are required")
 	}
+	if req.GetPaymentMethod() == paymentV1.PaymentMethod_PAYMENT_METHOD_UNKNOWN_UNSPECIFIED {
+		return nil, status.Error(codes.InvalidArgument, "payment_method is required and must be != UNKNOWN")
+	}
 
 	txID := uuid.NewString()
-	log.Printf("Оплата прошла успешно, transaction_uuid: %s", txID)
+	log.Printf("Оплата прошла успешно, transaction_uuid: %s, method: %s", txID, req.GetPaymentMethod().String())
 
-	return &paymentV1.PayOrderResponse{
-		TransactionUuid: txID,
-	}, nil
+	return &paymentV1.PayOrderResponse{TransactionUuid: txID}, nil
 }
 
 func main() {

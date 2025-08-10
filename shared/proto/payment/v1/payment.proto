@@ -15,7 +15,7 @@ enum PaymentMethod{
   // Банковская карта
   PAYMENT_METHOD_CARD = 1;
   // Система быстрых платежей
-  PAYMENT_METHOD_SPB = 2;
+  PAYMENT_METHOD_SBP = 2;
   // Кредитная карта
   PAYMENT_METHOD_CREDIT_CARD = 3;
   // Деньги инвестора (внутренний метод)
