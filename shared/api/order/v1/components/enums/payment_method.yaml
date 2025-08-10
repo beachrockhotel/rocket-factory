@@ -1,0 +1,10 @@
+type: string
+description: Способ оплаты (если оплачен)
+enum:
+  - UNKNOWN
+  - CARD
+  - SBP
+  - CREDIT_CARD
+  - INVESTOR_MONEY
+nullable: true
+example: "CARD"
