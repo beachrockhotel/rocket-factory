@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"math"
 	"net"
@@ -52,7 +53,6 @@ func checkThatAllPartsExist(
 	uuids []string,
 	parts []*inventory_v1.Part,
 ) (countBy map[string]int, found map[string]*inventory_v1.Part, missing []string) {
-
 	found = make(map[string]*inventory_v1.Part, len(parts))
 	for _, p := range parts {
 		if p == nil {
@@ -274,37 +274,40 @@ func (h *OrderHandler) NewError(_ context.Context, err error) *order_v1.GenericE
 	}
 }
 
-func main() {
-	invConn, err := grpc.Dial(inventoryAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+func run() error {
+	invConn, err := grpc.NewClient(inventoryAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("failed to dial inventory %s: %v", inventoryAddr, err)
+		return fmt.Errorf("dial inventory %s: %w", inventoryAddr, err)
 	}
-	defer invConn.Close()
-	invClient := inventory_v1.NewInventoryServiceClient(invConn)
+	defer func() {
+		if cerr := invConn.Close(); cerr != nil {
+			log.Printf("close inventory conn error: %v", cerr)
+		}
+	}()
 
-	payConn, err := grpc.Dial(paymentAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	payConn, err := grpc.NewClient(paymentAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("failed to dial payment %s: %v", paymentAddr, err)
+		return fmt.Errorf("dial payment %s: %w", paymentAddr, err)
 	}
-	defer payConn.Close()
+	defer func() {
+		if cerr := payConn.Close(); cerr != nil {
+			log.Printf("close payment conn error: %v", cerr)
+		}
+	}()
+
+	invClient := inventory_v1.NewInventoryServiceClient(invConn)
 	payClient := payment_v1.NewPaymentServiceClient(payConn)
 
 	storage := NewOrderStorage()
-	handler := &OrderHandler{
-		storage: storage,
-		inv:     invClient,
-		pay:     payClient,
-	}
+	handler := &OrderHandler{storage: storage, inv: invClient, pay: payClient}
 
 	orderServer, err := order_v1.NewServer(handler)
 	if err != nil {
-		log.Fatalf("openapi server init error: %v", err)
+		return fmt.Errorf("openapi server init: %w", err)
 	}
 
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(10 * time.Second))
+	r.Use(middleware.Logger, middleware.Recoverer, middleware.Timeout(10*time.Second))
 	r.Mount("/", orderServer)
 
 	srv := &http.Server{
@@ -328,7 +331,15 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("shutdown error: %v", err)
+		return fmt.Errorf("shutdown: %w", err)
 	}
 	log.Println("✅ Server stopped")
+	return nil
+}
+
+func main() {
+	if err := run(); err != nil {
+		log.Printf("fatal: %v", err)
+		os.Exit(1)
+	}
 }

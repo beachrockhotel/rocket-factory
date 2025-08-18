@@ -39,7 +39,7 @@ func generateParts() []*inventoryV1.Part {
 			Description:   descriptions[idx],
 			Price:         roundTo(gofakeit.Float64Range(100, 10000)),
 			StockQuantity: int64(gofakeit.Number(1, 100)),
-			Category:      inventoryV1.Category(gofakeit.Number(1, 4)),
+			Category:      inventoryV1.Category(gofakeit.Number(1, 4)), //nolint:gosec
 			Dimensions:    generateDimensions(),
 			Manufacturer:  generateManufacturer(),
 			Tags:          generateTags(),

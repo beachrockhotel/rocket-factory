@@ -19,6 +19,8 @@ import (
 
 const grpcPort = 50051
 
+var ErrPartNotFound = errors.New("part not found")
+
 type inventoryService struct {
 	inventory_v1.UnimplementedInventoryServiceServer
 	mu  sync.RWMutex
@@ -28,7 +30,6 @@ type inventoryService struct {
 func (s *inventoryService) GetPart(_ context.Context, req *inventory_v1.GetPartRequest) (*inventory_v1.GetPartResponse, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var ErrPartNotFound = errors.New("part not found")
 	part, ok := s.inv[req.Uuid]
 	if !ok {
 		return nil, ErrPartNotFound
@@ -38,18 +39,41 @@ func (s *inventoryService) GetPart(_ context.Context, req *inventory_v1.GetPartR
 	}, nil
 }
 
+func isEmptyFilter(f *inventory_v1.PartsFilter) bool {
+	if f == nil {
+		return true
+	}
+	return len(f.Uuids) == 0 &&
+		len(f.Names) == 0 &&
+		len(f.Categories) == 0 &&
+		len(f.ManufacturerCountries) == 0 &&
+		len(f.Tags) == 0
+}
+
+func hasAnyTag(need, have []string) bool {
+	if len(need) == 0 || len(have) == 0 {
+		return false
+	}
+	set := make(map[string]struct{}, len(have))
+	for _, t := range have {
+		set[t] = struct{}{}
+	}
+	for _, t := range need {
+		if _, ok := set[t]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *inventoryService) ListParts(_ context.Context, req *inventory_v1.ListPartsRequest) (*inventory_v1.ListPartsResponse, error) {
-	filter := req.GetFilter()
+	f := req.GetFilter()
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if filter == nil ||
-		(len(filter.Uuids) == 0 &&
-			len(filter.Names) == 0 &&
-			len(filter.Categories) == 0 &&
-			len(filter.ManufacturerCountries) == 0 &&
-			len(filter.Tags) == 0) {
+	// пустой фильтр → вернуть всё
+	if isEmptyFilter(f) {
 		all := make([]*inventory_v1.Part, 0, len(s.inv))
 		for _, part := range s.inv {
 			all = append(all, part)
@@ -59,36 +83,21 @@ func (s *inventoryService) ListParts(_ context.Context, req *inventory_v1.ListPa
 
 	result := make([]*inventory_v1.Part, 0, 16)
 	for _, part := range s.inv {
-		if len(filter.Uuids) > 0 && !slices.Contains(filter.Uuids, part.GetUuid()) {
-			continue
-		}
-		if len(filter.Names) > 0 && !slices.Contains(filter.Names, part.GetName()) {
-			continue
-		}
-		if len(filter.Categories) > 0 && !slices.Contains(filter.Categories, part.GetCategory()) {
-			continue
-		}
-		if len(filter.ManufacturerCountries) > 0 {
+		uuidOK := len(f.Uuids) == 0 || slices.Contains(f.Uuids, part.GetUuid())
+		nameOK := len(f.Names) == 0 || slices.Contains(f.Names, part.GetName())
+		catOK := len(f.Categories) == 0 || slices.Contains(f.Categories, part.GetCategory())
+
+		countryOK := true
+		if len(f.ManufacturerCountries) > 0 {
 			m := part.GetManufacturer()
-			if m == nil || !slices.Contains(filter.ManufacturerCountries, m.GetCountry()) {
-				continue
-			}
-		}
-		if len(filter.Tags) > 0 {
-			ptags := part.GetTags()
-			hasAny := false
-			for _, t := range filter.Tags {
-				if slices.Contains(ptags, t) {
-					hasAny = true
-					break
-				}
-			}
-			if !hasAny {
-				continue
-			}
+			countryOK = m != nil && slices.Contains(f.ManufacturerCountries, m.GetCountry())
 		}
 
-		result = append(result, part)
+		tagsOK := len(f.Tags) == 0 || hasAnyTag(f.Tags, part.GetTags())
+
+		if uuidOK && nameOK && catOK && countryOK && tagsOK {
+			result = append(result, part)
+		}
 	}
 
 	return &inventory_v1.ListPartsResponse{Parts: result}, nil
