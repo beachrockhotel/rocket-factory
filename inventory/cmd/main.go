@@ -72,7 +72,6 @@ func (s *inventoryService) ListParts(_ context.Context, req *inventory_v1.ListPa
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// пустой фильтр → вернуть всё
 	if isEmptyFilter(f) {
 		all := make([]*inventory_v1.Part, 0, len(s.inv))
 		for _, part := range s.inv {
