@@ -33,11 +33,9 @@ const (
 	paymentAddr   = "localhost:50052"
 )
 
-// ==== In-memory хранилище ====
-
 type OrderStorage struct {
 	mu     sync.RWMutex
-	orders map[string]*order_v1.OrderDto // key = order_uuid (string)
+	orders map[string]*order_v1.OrderDto
 }
 
 func NewOrderStorage() *OrderStorage {
@@ -47,55 +45,80 @@ func NewOrderStorage() *OrderStorage {
 type OrderHandler struct {
 	storage *OrderStorage
 	inv     inventory_v1.InventoryServiceClient
-	pay     payment_v1.PaymentServiceClient // пока не используется
+	pay     payment_v1.PaymentServiceClient
 }
 
-// CreateOrder: POST /api/v1/orders
-func (h *OrderHandler) CreateOrder(ctx context.Context, req *order_v1.CreateOrderRequest) (order_v1.CreateOrderRes, error) {
-	// 1) Валидация
-	if req.UserUUID == (uuid.UUID{}) {
-		return &order_v1.BadRequestError{
-			Code:    http.StatusBadRequest,
-			Message: "user_uuid is required",
-		}, nil
-	}
-	if len(req.PartUuids) == 0 {
-		return &order_v1.BadRequestError{
-			Code:    http.StatusBadRequest,
-			Message: "part_uuids is required",
-		}, nil
+func checkThatAllPartsExist(
+	uuids []string,
+	parts []*inventory_v1.Part,
+) (countBy map[string]int, found map[string]*inventory_v1.Part, missing []string) {
+
+	found = make(map[string]*inventory_v1.Part, len(parts))
+	for _, p := range parts {
+		if p == nil {
+			continue
+		}
+		if id := p.GetUuid(); id != "" {
+			found[id] = p
+		}
 	}
 
-	// 2) []uuid.UUID -> []string для фильтра
+	countBy = make(map[string]int, len(uuids))
+	missingSet := make(map[string]struct{})
+
+	for _, id := range uuids {
+		if id == "" {
+			missingSet[id] = struct{}{}
+			continue
+		}
+		countBy[id]++
+		if _, ok := found[id]; !ok {
+			missingSet[id] = struct{}{}
+		}
+	}
+
+	if len(missingSet) > 0 {
+		missing = make([]string, 0, len(missingSet))
+		for id := range missingSet {
+			if id != "" {
+				missing = append(missing, id)
+			}
+		}
+	}
+	return
+}
+
+func calcTotal(found map[string]*inventory_v1.Part, countBy map[string]int) float64 {
+	var total float64
+	for id, n := range countBy {
+		if p, ok := found[id]; ok {
+			total += p.GetPrice() * float64(n)
+		}
+	}
+	return math.Round(total*100) / 100
+}
+
+func (h *OrderHandler) CreateOrder(ctx context.Context, req *order_v1.CreateOrderRequest) (order_v1.CreateOrderRes, error) {
+	if req.UserUUID == uuid.Nil {
+		return &order_v1.BadRequestError{Code: http.StatusBadRequest, Message: "user_uuid is required"}, nil
+	}
+	if len(req.PartUuids) == 0 {
+		return &order_v1.BadRequestError{Code: http.StatusBadRequest, Message: "part_uuids is required"}, nil
+	}
+
 	uuids := make([]string, 0, len(req.PartUuids))
 	for _, u := range req.PartUuids {
 		uuids = append(uuids, u.String())
 	}
 
-	// 3) gRPC в Inventory
 	invResp, err := h.inv.ListParts(ctx, &inventory_v1.ListPartsRequest{
 		Filter: &inventory_v1.PartsFilter{Uuids: uuids},
 	})
 	if err != nil {
-		return &order_v1.BadGatewayError{
-			Code:    http.StatusBadGateway,
-			Message: "inventory unavailable",
-		}, nil
+		return &order_v1.BadGatewayError{Code: http.StatusBadGateway, Message: "inventory unavailable"}, nil
 	}
 
-	// 4) Проверка, что все детали существуют (учёт кратности)
-	found := make(map[string]*inventory_v1.Part, len(invResp.GetParts()))
-	for _, p := range invResp.GetParts() {
-		found[p.GetUuid()] = p
-	}
-	countBy := make(map[string]int, len(uuids))
-	var missing []string
-	for _, id := range uuids {
-		countBy[id]++
-		if _, ok := found[id]; !ok {
-			missing = append(missing, id)
-		}
-	}
+	countBy, found, missing := checkThatAllPartsExist(uuids, invResp.GetParts())
 	if len(missing) > 0 {
 		return &order_v1.BadRequestError{
 			Code:    http.StatusBadRequest,
@@ -103,14 +126,8 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *order_v1.CreateOrde
 		}, nil
 	}
 
-	// 5) Расчёт total_price (учитываем кратность), округляем до 2 знаков
-	var total float64
-	for id, n := range countBy {
-		total += found[id].GetPrice() * float64(n)
-	}
-	total = math.Round(total*100) / 100
+	total := calcTotal(found, countBy)
 
-	// 6) Генерим order_uuid и сохраняем
 	orderID := uuid.NewString()
 	h.storage.mu.Lock()
 	h.storage.orders[orderID] = &order_v1.OrderDto{
@@ -119,11 +136,9 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *order_v1.CreateOrde
 		PartUuids:  append([]uuid.UUID(nil), req.PartUuids...),
 		TotalPrice: total,
 		Status:     order_v1.OrderStatusPENDINGPAYMENT,
-		// TransactionUUID, PaymentMethod — нулевые значения (не установлены) → это ок
 	}
 	h.storage.mu.Unlock()
 
-	// 7) Ответ (успешный результат)
 	return &order_v1.CreateOrderResponse{
 		OrderUUID:  uuid.MustParse(orderID),
 		TotalPrice: float32(total),
@@ -151,7 +166,6 @@ func (h *OrderHandler) CreatePayment(ctx context.Context, req *order_v1.PayOrder
 	id := params.OrderUUID.String()
 	pmOpt := req.PaymentMethod
 
-	// 1) Найти заказ + базовые проверки статуса
 	h.storage.mu.RLock()
 	o, ok := h.storage.orders[id]
 	h.storage.mu.RUnlock()
@@ -159,20 +173,17 @@ func (h *OrderHandler) CreatePayment(ctx context.Context, req *order_v1.PayOrder
 		return &order_v1.NotFoundError{Code: http.StatusNotFound, Message: "order not found"}, nil
 	}
 	if o.Status == order_v1.OrderStatusCANCELLED {
-		// для CreatePayment контракт не допускает 409, поэтому 400
 		return &order_v1.BadRequestError{Code: http.StatusBadRequest, Message: "order cancelled"}, nil
 	}
 	if o.Status == order_v1.OrderStatusPAID {
 		return &order_v1.BadRequestError{Code: http.StatusBadRequest, Message: "already paid"}, nil
 	}
 
-	// 2) Валидация payment_method
 	pm, ok := pmOpt.Get()
 	if !ok || pm == order_v1.PaymentMethodUNKNOWN {
 		return &order_v1.BadRequestError{Code: http.StatusBadRequest, Message: "invalid payment_method"}, nil
 	}
 
-	// 3) Маппинг OpenAPI → gRPC enum
 	var grpcPM payment_v1.PaymentMethod
 	switch pm {
 	case order_v1.PaymentMethodCARD:
@@ -187,34 +198,29 @@ func (h *OrderHandler) CreatePayment(ctx context.Context, req *order_v1.PayOrder
 		return &order_v1.BadRequestError{Code: http.StatusBadRequest, Message: "invalid payment_method"}, nil
 	}
 
-	// 4) Вызов платёжки
 	pr, err := h.pay.PayOrder(ctx, &payment_v1.PayOrderRequest{
 		OrderUuid:     id,
 		UserUuid:      o.UserUUID.String(),
 		PaymentMethod: grpcPM,
 	})
 	if err != nil {
-		// для CreatePayment контракт не допускает 502, поэтому 500
 		return &order_v1.InternalServerError{Code: http.StatusInternalServerError, Message: "payment unavailable"}, nil
 	}
 
-	// 5) Разбор transaction_uuid из ответа платёжки
 	txStr := pr.GetTransactionUuid()
 	txID, err := uuid.Parse(txStr)
 	if err != nil {
 		return &order_v1.InternalServerError{Code: http.StatusInternalServerError, Message: "invalid transaction uuid from payment"}, nil
 	}
 
-	// 6) Обновить заказ под Lock (на случай гонки проверяем статус повторно)
 	h.storage.mu.Lock()
 	if o2, ok := h.storage.orders[id]; ok {
 		switch o2.Status {
 		case order_v1.OrderStatusPENDINGPAYMENT:
 			o2.Status = order_v1.OrderStatusPAID
-			o2.TransactionUUID.SetTo(txID) // OptNilUUID
-			o2.PaymentMethod.SetTo(pm)     // OptNilPaymentMethod
+			o2.TransactionUUID.SetTo(txID)
+			o2.PaymentMethod.SetTo(pm)
 		case order_v1.OrderStatusPAID:
-			// если кто-то уже оплатил — вернуть текущий tx идемпотентно
 			if tx, ok := o2.TransactionUUID.Get(); ok {
 				h.storage.mu.Unlock()
 				return &order_v1.PayOrderResponse{TransactionUUID: tx}, nil
@@ -226,7 +232,6 @@ func (h *OrderHandler) CreatePayment(ctx context.Context, req *order_v1.PayOrder
 	}
 	h.storage.mu.Unlock()
 
-	// 7) Возврат успешного ответа с реальным transaction_uuid
 	return &order_v1.PayOrderResponse{TransactionUUID: txID}, nil
 }
 
@@ -243,15 +248,12 @@ func (h *OrderHandler) CancelOrder(_ context.Context, params order_v1.CancelOrde
 
 	switch o.Status {
 	case order_v1.OrderStatusPAID:
-		// Оплаченный нельзя отменить 409
 		return &order_v1.ConflictError{Code: http.StatusConflict, Message: "order already paid"}, nil
 
 	case order_v1.OrderStatusCANCELLED:
-		// Уже отменён — идемпотентно считаем успехом → 204
 		return &order_v1.CancelOrderNoContent{}, nil
 
 	case order_v1.OrderStatusPENDINGPAYMENT:
-		// Отмена ожидающей оплаты ставим CANCELLED и чистим оплату
 		o.Status = order_v1.OrderStatusCANCELLED
 		o.TransactionUUID.SetToNull()
 		o.PaymentMethod.SetToNull()
@@ -273,7 +275,6 @@ func (h *OrderHandler) NewError(_ context.Context, err error) *order_v1.GenericE
 }
 
 func main() {
-	// gRPC-клиенты к Inventory/Payment
 	invConn, err := grpc.Dial(inventoryAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("failed to dial inventory %s: %v", inventoryAddr, err)
@@ -295,13 +296,11 @@ func main() {
 		pay:     payClient,
 	}
 
-	// ogen-сервер (оборачивает handler)
 	orderServer, err := order_v1.NewServer(handler)
 	if err != nil {
 		log.Fatalf("openapi server init error: %v", err)
 	}
 
-	// HTTP роутер/сервер
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -314,7 +313,6 @@ func main() {
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
-	// Запуск
 	go func() {
 		log.Printf("🚀 HTTP OrderService listening on %s", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -322,7 +320,6 @@ func main() {
 		}
 	}()
 
-	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
