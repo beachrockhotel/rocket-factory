@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package payment.v1;
+
+option go_package = "github.com/beachrockhotel/rocket-factory/shared/pkg/proto/payment/v1;payment_v1";
+// Сервис оплаты заказов симулирует работу платёжного шлюза. Он не сохраняет состояние, а просто принимает команду на оплату, генерирует UUID транзакции, печатает его в консоль и возвращает вызывающей стороне.
+service PaymentService {
+  // Ручка произведения оплаты
+  rpc PayOrder(PayOrderRequest) returns (PayOrderResponse);
+}
+// Перечесление методов оплаты
+enum PaymentMethod{
+  // Неизвестный способ
+  PAYMENT_METHOD_UNKNOWN_UNSPECIFIED = 0;
+  // Банковская карта
+  PAYMENT_METHOD_CARD = 1;
+  // Система быстрых платежей
+  PAYMENT_METHOD_SBP = 2;
+  // Кредитная карта
+  PAYMENT_METHOD_CREDIT_CARD = 3;
+  // Деньги инвестора (внутренний метод)
+  PAYMENT_METHOD_INVESTOR_MONEY = 4;
+}
+// Обрабатывает команду на оплату и возвращает transaction_uuid
+message PayOrderRequest {
+  // UUID заказа
+  string order_uuid = 1;
+  // UUID пользователя, который инициирует оплату
+  string user_uuid = 2;
+  // Выбранный способ оплаты
+  PaymentMethod payment_method = 3;
+}
+// Ответ на запрос об оплате
+message PayOrderResponse {
+  // UUID транзакции оплаты
+  string transaction_uuid = 1;
+}

@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package inventory.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/beachrockhotel/rocket-factory/shared/pkg/proto/inventory/v1;inventory_v1";
+// InventoryService - сервис отвечающий за хранение и предоставление информации о деталях для сборких космических кораблей.
+service InventoryService {
+  // Ручка возвращает список деталей по идентификатору
+  rpc GetPart(GetPartRequest) returns (GetPartResponse);
+  // Ручка возвращает список деталей с возможностью филтрации
+  rpc ListParts(ListPartsRequest) returns (ListPartsResponse);
+}
+// Структура part описовающая деталь
+message Part {
+  // Уникальный идентификатор детали
+  string uuid = 1;
+  // Название детали
+  string name = 2;
+  // Описание детали
+  string description = 3;
+  // Цена за единицу
+  double price = 4;
+  // Количество на складе
+  int64 stock_quantity = 5;
+  // Категория
+  Category category = 6;
+  // Размеры детали
+  Dimensions dimensions = 7;
+  // Информация о производителе
+  Manufacturer manufacturer = 8;
+  // Теги для быс трого поиска
+  repeated string tags = 9;
+  // Гибкие метаданные
+  map<string, Value> metadata = 10;
+  // Дата создания
+  google.protobuf.Timestamp created_at = 11;
+  // Дата обновления
+  google.protobuf.Timestamp updated_at = 12;
+}
+// Запрос на получение ID детали
+message GetPartRequest {
+  string uuid = 1;
+}
+// Ответ с информацией о детали
+message GetPartResponse {
+  Part part = 1;
+}
+// Возвращает список деталей с возможностью фильтрации
+message ListPartsRequest {
+  PartsFilter filter = 1;
+}
+// Ручка для фильтрации деталей
+message PartsFilter {
+  repeated string uuids = 1;
+  repeated string names = 2;
+  repeated Category categories = 3;
+  repeated string manufacturer_countries = 4;
+  repeated string tags = 5;
+}
+// Возвращает список деталей
+message ListPartsResponse {
+  repeated Part parts = 1;
+}
+// Категории деталей
+enum Category {
+  CATEGORY_UNKNOWN_UNSPECIFIED = 0;
+  CATEGORY_ENGINE = 1;
+  CATEGORY_FUEL = 2;
+  CATEGORY_PORTHOLE = 3;
+  CATEGORY_WING = 4;
+}
+// Размеры детали
+message Dimensions {
+  double length = 1;
+  double width = 2;
+  double height = 3;
+  double weight = 4;
+}
+// Производитель детали
+message Manufacturer {
+  string name = 1;
+  string country = 2;
+  string website = 3;
+}
+// Тип значения, один из
+message Value {
+  oneof kind {
+    string string_value = 1;
+    int64 int64_value = 2;
+    double double_value = 3;
+    bool bool_value = 4;
+  }
+}
