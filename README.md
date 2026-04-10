@@ -3,11 +3,16 @@
 ![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/beachrockhotel/e40f85a43679c37c368eaf8e6fe19e97/raw/coverage.json)
 
 Для того чтобы вызывать команды из Taskfile, необходимо установить Taskfile CLI:
-
+# macOS
 ```bash
 brew install go-task
 ```
 
+# Linux
+
+```bash
+go install github.com/go-task/task/v3/cmd/task@latest
+```
 ## CI/CD
 
 Проект использует GitHub Actions для непрерывной интеграции и доставки. Основные workflow:
