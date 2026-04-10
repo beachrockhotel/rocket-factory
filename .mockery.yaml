@@ -1,0 +1,35 @@
+with-expecter: true
+boilerplate-file: ".mockery_boilerplate_text.txt"
+dir: "{{.InterfaceDir}}/mocks"
+filename: "mock_{{.InterfaceNameSnake}}.go"
+outpkg: "mocks"
+mockname: "{{.InterfaceName}}"
+resolve-type-alias: False
+issue-845-fix: True
+
+packages:
+  github.com/beachrockhotel/rocket-factory/inventory/internal/service:
+    config:
+      include-regex: ".*Service"
+
+  github.com/beachrockhotel/rocket-factory/inventory/internal/repository:
+    config:
+      include-regex: ".*Repository"
+  github.com/beachrockhotel/rocket-factory/order/internal/service:
+    config:
+      include-regex: ".*Service"
+
+  github.com/beachrockhotel/rocket-factory/order/internal/repository:
+    config:
+      include-regex: ".*Repository"
+  github.com/beachrockhotel/rocket-factory/payment/internal/service:
+    config:
+      include-regex: ".*Service"
+
+  github.com/beachrockhotel/rocket-factory/payment/internal/repository:
+    config:
+      include-regex: ".*Repository"
+
+  github.com/beachrockhotel/rocket-factory/order/internal/client/grpc:
+    config:
+      include-regex: ".*Client"

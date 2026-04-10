@@ -1,0 +1,2 @@
+// Code generated for beachrockhotel service
+// © beachrockhotel 2026.

@@ -1,0 +1,11 @@
+package service
+
+import (
+	"context"
+
+	"github.com/beachrockhotel/rocket-factory/payment/internal/model"
+)
+
+type PaymentService interface {
+	PayOrder(ctx context.Context, req model.PayOrderRequest) (string, error)
+}

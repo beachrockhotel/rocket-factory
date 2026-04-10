@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package payment.v1;
+
+option go_package = "github.com/beachrockhotel/rocket-factory/shared/pkg/proto/repository/grpc;payment_v1";
+
+service PaymentService {
+  rpc PayOrder(PayOrderRequest) returns (PayOrderResponse);
+}
+
+// Запрос на оплату заказа
+message PayOrderRequest {
+  string order_uuid = 1;
+  string user_uuid = 2;
+  PaymentMethod payment_method = 3;
+}
+
+// ID оплаченного заказа
+message PayOrderResponse {
+  string transaction_uuid = 1;
+}
+
+// Виды оплаты заказа
+enum PaymentMethod {
+  PAYMENT_METHOD_UNKNOWN_UNSPECIFIED = 0;
+  PAYMENT_METHOD_CARD = 1;
+  PAYMENT_METHOD_SBP = 2;
+  PAYMENT_METHOD_CREDIT_CARD = 3;
+  PAYMENT_METHOD_INVESTOR_MONEY = 4;
+}

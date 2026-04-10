@@ -1,0 +1,3 @@
+version: grpc
+directories:
+  - shared/proto
